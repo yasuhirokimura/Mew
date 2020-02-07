@@ -200,13 +200,9 @@
       (let ((file (expand-file-name mew-passwd-file mew-conf-path)))
 	(message "mew-passwd-setup-master: b a")
 	(if (file-exists-p file)
-	    (progn 
-	      (message "mew-passwd-setup-master: b a a")
-	      (setq mew-passwd-alist (mew-passwd-load)))
-	  (message "mew-passwd-setup-master: b a b")
+	    (setq mew-passwd-alist (mew-passwd-load))
 	  (mew-passwd-save "ask")	;; save nil and ask master twice
 	  (mew-passwd-load))) ;; load new password
-      (message "mew-passwd-setup-master: c")
       (add-hook 'kill-emacs-hook 'mew-passwd-clean-up)))))
 
 (defun mew-passwd-clean-up ()
@@ -244,23 +240,17 @@
   (message "mew-input-passwd: start")
   (if (and key (or mew-use-cached-passwd mew-use-master-passwd))
       (progn
-	(message "mew-input-passwd: a")
 	(mew-passwd-setup-master)
-	(message "mew-input-passwd: a b")
 	(if (stringp (mew-passwd-get-passwd key))
 	    (progn
-	      (message "mew-input-passwd: a c")
 	      (mew-timing)
 	      (if mew-passwd-reset-timer (mew-passwd-set-counter key 0))
 	      (mew-passwd-get-passwd key))
 	  (let ((pass (mew-read-passwd prompt)))
-	    (message "mew-input-passwd: a d")
 	    (mew-passwd-set-passwd key pass)
 	    (mew-passwd-set-counter key 0)
 	    pass)))
-    (progn
-      (message "mew-input-passwd: b")
-      (mew-read-passwd prompt))))
+    (mew-read-passwd prompt)))
 
 (defun mew-read-passwd (prompt)
   (let (;; A process filter sets inhibit-quit to t to prevent quitting.
@@ -302,20 +292,13 @@
 ;;;
 
 (defmacro mew-passwd-rendezvous (pro)
-  `(progn
-     (message "mew-passwd-rendezvous: start")
-     (condition-case nil
-	 (let ((inhibit-quit nil))
-	   (message "mew-passwd-rendezvous: a")
-	   (setq mew-passwd-rendezvous t)
-	   (while mew-passwd-rendezvous
-	     (message "mew-passwd-rendezvous: a b")
-	     (accept-process-output ,pro 0.1 nil t)
-	     (message "mew-passwd-rendezvous: a c")
-	     ))
+  `(condition-case nil
+       (let ((inhibit-quit nil))
+	 (setq mew-passwd-rendezvous t)
+	 (while mew-passwd-rendezvous
+	   (accept-process-output ,pro 0.1 nil t)))
      (quit
-      (message "mew-passwd-rendezvous: b")
-      (setq mew-passwd-rendezvous nil)))))
+      (setq mew-passwd-rendezvous nil))))
 
 (defun mew-passwd-load ()
   (let* ((process-connection-type mew-connection-type2)
@@ -360,10 +343,8 @@
 	 (tfile (mew-make-temp-name "gpg-save"))
 	 (N mew-passwd-repeat)
 	 pro args)
-    (message "mew-passwd-save: a")
     (if (file-exists-p file)
 	(rename-file file (concat file mew-backup-suffix) 'override))
-    (message "mew-passwd-save: b")
     (cond
      ((eq mew-master-passwd-encryption 'symmetric)
       (setq args (mew-passwd-adjust-args (append mew-passwd-master-symmetric-encryption-command (list "--yes" "--output" file tfile)) pinentry-mode)))
@@ -371,41 +352,28 @@
       (setq args (mew-passwd-adjust-args (append mew-passwd-master-asymmetric-encryption-command (list "--yes" "--output" file tfile)) pinentry-mode)))
      (t (error "unknown mew-use-master-passwd-encryption")))
     (unwind-protect
-	(progn
-	  (message "mew-passwd-save: b a")
-	  (with-temp-buffer
-	    (message "mew-passwd-save: b a a")
-	    (pp mew-passwd-alist (current-buffer))
-	    (write-region (point-min) (point-max) tfile nil 'no-msg)
-	    (message "mew-passwd-save: b a b")
-	    (catch 'loop
-	      (message "mew-passwd-save: b a b a")
-	      (dotimes (_i N) ;; prevent byte-compile warning
-		(message "mew-passwd-save: b a b a a")
-		(setq pro (apply
-			   'mew-start-process-lang
-			   mew-passwd-encryption-name
-			   (current-buffer)
-			   mew-prog-passwd
-			   args))
-		(message "mew-passwd-save: b a b a b")
-		(set-process-filter   pro 'mew-passwd-filter)
-		(message "mew-passwd-save: b a b a c")
-		(set-process-sentinel pro 'mew-passwd-sentinel)
-		(message "mew-passwd-save: b a b a d")
-		(mew-passwd-rendezvous pro)
-		(message "mew-passwd-save: b a b a e")
-		(if (file-exists-p file) (throw 'loop nil))
-		(message "mew-passwd-save: b a b a f"))
-	      (message "mew-passwd-save: b a b b")
-	      (message "Master password is wrong! Passwords not saved")
-	      (message "mew-passwd-save: b a b c")
-	      (mew-let-user-read))))
-      (progn
-	  (message "mew-passwd-save: b b")
-	  (unless (file-exists-p file)
-	    (rename-file (concat file mew-backup-suffix) file))
-	  (mew-passwd-delete-file tfile)))))
+	(with-temp-buffer
+	  (pp mew-passwd-alist (current-buffer))
+	  (write-region (point-min) (point-max) tfile nil 'no-msg)
+	  (catch 'loop
+	    (dotimes (_i N) ;; prevent byte-compile warning
+	      (message "mew-passwd-save: NAME=%s, BUFFER=%s, PROGRAM=%s, PROGRAM-ARGS=%s"
+		       mew-passwd-encryption-name (current-buffer) mew-prog-passwd args)
+	      (setq pro (apply
+			 'mew-start-process-lang
+			 mew-passwd-encryption-name
+			 (current-buffer)
+			 mew-prog-passwd
+			 args))
+	      (set-process-filter   pro 'mew-passwd-filter)
+	      (set-process-sentinel pro 'mew-passwd-sentinel)
+	      (mew-passwd-rendezvous pro)
+	      (if (file-exists-p file) (throw 'loop nil)))
+	    (message "Master password is wrong! Passwords not saved")
+	    (mew-let-user-read)))
+      (unless (file-exists-p file)
+	(rename-file (concat file mew-backup-suffix) file))
+      (mew-passwd-delete-file tfile))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -413,6 +381,7 @@
 ;;;
 
 (defun mew-passwd-filter (process string)
+  (message "mew-passwd-filter: string=\"%s\"" string)
   (let* ((name (process-name process))
 	 (regex (concat "^" (regexp-quote mew-passwd-encryption-name)))
 	 (encrypt-p (string-match regex name)))
@@ -434,6 +403,7 @@
 	(setq mew-passwd-rendezvous nil))))))
 
 (defun mew-passwd-sentinel (_process _event)
+  (message "mew-passwd-sentinel: start")
   (setq mew-passwd-rendezvous nil))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
